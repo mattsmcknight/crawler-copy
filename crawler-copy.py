@@ -4,6 +4,7 @@ import shutil
 import sys
 import subprocess
 
+#global to keep track of number of unzip operations
 num_operations = 0
 
 source = sys.argv[1]
@@ -11,13 +12,14 @@ dest = sys.argv[2]
 backup = sys.argv[3]
 overwrite = ''
 
+#check for ending / and remove.
 if source.endswith('/'):
     source = source[:-1]
 if dest.endswith('/'):
     dest = dest[:-1]
 if backup.endswith('/'):
     backup = backup[:-1]
-
+    
 if len(sys.argv) > 4:
     overwrite = sys.argv[4]
 
@@ -36,6 +38,7 @@ lensource = len(source.split('/')[1:])
 lendest = len(dest.split('/')[1:])
 lenbackup = len(backup.split('/')[1:])
 
+# support for recursive scantree (future upgrade)
 def scantree(path):
     """Recursively yield DirEntry objects for given directory."""
     for entry in os.scandir(path):
@@ -44,7 +47,8 @@ def scantree(path):
         else:
             yield entry
 
-
+# Decorator script that walks a directory recursively. Uses the source dir, destination dir, and overwrite to pass to
+# decorated function. Used to decorate copy and unzip operations.
 def walk_through(source, dest, overwrite, length):
     def walk_through_start(decorated_function):
         def wrapper():
@@ -67,8 +71,15 @@ def walk_through(source, dest, overwrite, length):
         return wrapper
     return walk_through_start
 
+
+Copies the specified file to it's full path destination, overwrites if specified. 
+Decorated to recursively copy all files and directories.
 @walk_through(source, dest, overwrite, lensource)
 def copy_files(filename, dest_dir, overwrite):
+    '''
+    Copies the specified file to it's full path destination, overwrites if specified. 
+    Decorated to recursively copy all files and directories.
+    '''
     dest_file = '/'.join([dest_dir, filename.split('/')[-1]])
     if overwrite or os.path.exists(dest_file) == False and os.path.isfile(filename):
         shutil.copy(filename, dest_dir)
@@ -76,6 +87,10 @@ def copy_files(filename, dest_dir, overwrite):
 
 @walk_through(dest, dest, overwrite, lendest)
 def unzip_dest(filename, dest_dir, overwrite):
+    '''
+    Uses decorated to recursively walk the target directory and unzip all files. Creates skip file prevent
+    unzipping the same file twice. Returns the number of zip operations performed.
+    '''
     global num_operations
     zipow = '-n'
     tarow = '-k'
@@ -105,6 +120,9 @@ def unzip_dest(filename, dest_dir, overwrite):
 
 @walk_through(dest, backup, overwrite, lenbackup)
 def copy_backup(filename, dest_dir, overwrite):
+    '''
+    Copies the unzip destination files to the selected backup location. Uses decorator to do a recursive copy.
+    '''
     dest_file = '/'.join([dest_dir, filename.split('/')[-1]])
     if overwrite or os.path.exists(dest_file) == False and os.path.isfile(filename):
         shutil.copy(filename, dest_dir)
@@ -114,6 +132,9 @@ if __name__ == '__main__':
 
     copy_files()
 
+    # Loops through the unzip command until there are no files left to unzip. This operation is meant to unpack 
+    # nested zip files. Executes cleanup script to remove all skip files.
+    
     while True:
         unzip_dest()
         if num_operations == 0:
